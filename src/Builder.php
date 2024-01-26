@@ -326,8 +326,19 @@ class Builder
      */
     protected function parseDateTime(Query $query, $value, $key)
     {
+        $options = $query->getOptions();
         // 获取时间字段类型
-        $type = $this->connection->getTableInfo('', 'type');
+        if (strpos($key, '.')) {
+            list($table, $key) = explode('.', $key);
+
+            if (isset($options['alias']) && $pos = array_search($table, $options['alias'])) {
+                $table = $pos;
+            }
+        } else {
+            $table = $options['table'];
+        }
+        // 获取时间字段类型
+        $type = $this->connection->getTableInfo($table, 'type');
 
         if (isset($type[$key])) {
             $value = strtotime($value) ?: $value;
