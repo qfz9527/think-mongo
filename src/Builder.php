@@ -221,6 +221,13 @@ class Builder
 
         // 对一个字段使用多个查询条件
         if (is_array($exp)) {
+            $item = array_pop($val);
+            // 传入 or 或者 and
+            if (is_string($item) && in_array($item, ['AND', 'and', 'OR', 'or'])) {
+                $rule = $item;
+            } else {
+                array_push($val, $item);
+            }
             $data = [];
             foreach ($val as $value) {
                 $exp   = $value[0];
@@ -233,6 +240,13 @@ class Builder
                 }
                 $k        = '$' . $exp;
                 $data[$k] = $value;
+            }
+            if (isset($rule)&&strtolower($rule) == 'or') {
+                foreach ($data as $k => $v) {
+                    unset($data[$k]);
+                    $data[] = [$key => [$k => $v]];
+                }
+                $key = '$or';
             }
             $result[$key] = $data;
             return $result;
