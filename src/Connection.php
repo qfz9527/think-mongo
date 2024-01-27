@@ -113,7 +113,14 @@ class Connection
         'type_map'        => ['root' => 'array', 'document' => 'array'],
         // Query对象
         'query'           => '\\think\\mongo\\Query',
+        // 监听SQL
+        'trigger_sql'     => true,
+        // 开启字段缓存
+        'fields_cache'    => false,
     ];
+
+    protected $session_uuid; // sessions会话列表当前会话数组key 随机生成
+    protected $sessions = []; // 会话列表
 
     /**
      * 架构函数 读取数据库配置信息
@@ -1445,6 +1452,34 @@ class Connection
     }
 
     /**
+     * 执行数据库事务
+     * @access public
+     * @param  callable $callback 数据操作方法回调
+     * @return mixed
+     * @throws PDOException
+     * @throws \Exception
+     * @throws \Throwable
+     */
+    public function transaction(callable $callback)
+    {
+        $this->startTrans();
+        try {
+            $result = null;
+            if (is_callable($callback)) {
+                $result = call_user_func_array($callback, [$this]);
+            }
+            $this->commit();
+            return $result;
+        } catch (\Exception $e) {
+            $this->rollback();
+            throw $e;
+        } catch (\Throwable $e) {
+            $this->rollback();
+            throw $e;
+        }
+    }
+
+    /**
      * 启动事务
      * @access public
      * @return void
@@ -1452,7 +1487,13 @@ class Connection
      * @throws \Exception
      */
     public function startTrans()
-    {}
+    {
+        $this->initConnect(true);
+        $this->session_uuid                  = uniqid();
+        $this->sessions[$this->session_uuid] = $this->getMongo()->startSession();
+
+        $this->sessions[$this->session_uuid]->startTransaction([]);
+    }
 
     /**
      * 用于非自动提交状态下面的查询提交
@@ -1461,7 +1502,12 @@ class Connection
      * @throws PDOException
      */
     public function commit()
-    {}
+    {
+        if ($session = $this->getSession()) {
+            $session->commitTransaction();
+            $this->setLastSession();
+        }
+    }
 
     /**
      * 事务回滚
@@ -1470,7 +1516,42 @@ class Connection
      * @throws PDOException
      */
     public function rollback()
-    {}
+    {
+        if ($session = $this->getSession()) {
+            $session->abortTransaction();
+            $this->setLastSession();
+        }
+    }
+
+    /**
+     * 结束当前会话,设置上一个会话为当前会话
+     * @author klinson <klinson@163.com>
+     */
+    protected function setLastSession()
+    {
+        if ($session = $this->getSession()) {
+            $session->endSession();
+            unset($this->sessions[$this->session_uuid]);
+            if (empty($this->sessions)) {
+                $this->session_uuid = null;
+            } else {
+                end($this->sessions);
+                $this->session_uuid = key($this->sessions);
+            }
+        }
+    }
+
+    /**
+     * 获取当前会话
+     * @return \MongoDB\Driver\Session|null
+     * @author klinson <klinson@163.com>
+     */
+    public function getSession()
+    {
+        return ($this->session_uuid && isset($this->sessions[$this->session_uuid]))
+            ? $this->sessions[$this->session_uuid]
+            : null;
+    }
 
     /**
      * 析构方法
