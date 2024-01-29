@@ -241,7 +241,7 @@ class Builder
                 $k        = '$' . $exp;
                 $data[$k] = $value;
             }
-            if (isset($rule)&&strtolower($rule) == 'or') {
+            if (isset($rule) && strtolower($rule) == 'or') {
                 foreach ($data as $k => $v) {
                     unset($data[$k]);
                     $data[] = [$key => [$k => $v]];
